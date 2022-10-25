@@ -29,8 +29,8 @@ int directionPin = 4; //motor direction
 //global variables
 int dir = 1;
 
+//graycode output
 int outputGray = 0;
-double counterFreq = 0;
 
 //Counter variables
 volatile int counter = 0;//all variables used in interrupt must be declared volatile
@@ -60,7 +60,7 @@ void setup() {
   pinMode(directionPin, OUTPUT);
   //change PWM frequency
   TCCR0B = 0b00000010; // x8 
-  TCCR0A = 0b00000011; // 01 = phase correct, 11 = fast pwm
+  TCCR0A = 0b00000011; // 01 = phase correct(4khz), 11 = fast pwm(8khz)
   analogWrite(stepPin, 127); // 50% duty. Even square wave
   digitalWrite(directionPin, dir);
 
