@@ -4,34 +4,43 @@
 #define SCREEN_WIDTH 128 // OLED display width,  in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 #define avgSize 10
+#define measureTime 1000
+//#define testInterrupt
+
+//pins
+//#define
+
+int testLED = 0;
 
 // declare an SSD1306 display object connected to I2C
 Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 int wave = 0;
 //pins
-int absolutePins[5] = {9,10,11,12,13};
-int incrementalPin = 8;
-int stepPin = 5; //pwm pin with 1khz default
-int directionPin = 4;
+int absolutePins[5] = {8,9,10,11,12};//first 5 bits (A,B,C,D,E) are absolute encoder
+int incrementalPin = 2; //incremental encoder bit. Attach to pin 2 or 3, as they have hardware interupt
+
+//with normal 1.8 deg steppers, we would choose a frequency around 0hz to 50hz
+//The stepper drive in this stepup requires a much higher frequency because it is a microstepping drive.
+
+int stepPin = 5; //pwm pin with 1khz default. Later set to 4kHz
+int directionPin = 4; //motor direction
 
 //global variables
 int dir = 1;
 
 int outputGray = 0;
-long counterFreq = 0;
+double counterFreq = 0;
 
-//rolling average 
-float rollingRPM[avgSize] = {0};
-float avgRPM;
-
-//all variables used in interrupt must be declared volatile
-volatile int counter = 0;
-volatile long currentTime = 0;
-volatile long previousTime = 0;
-volatile long timeDif = 0;
-
+//Counter variables
+volatile int counter = 0;//all variables used in interrupt must be declared volatile
 int prevCounter = 0;
+int counterDif = 0;
+
+//timing variables
+double currentTime = 0;
+double previousTime = 0;
+
 
 void setup() {
   Serial.begin(19200);
@@ -43,14 +52,16 @@ void setup() {
 
   //attach interupt to incremental counter
   pinMode(incrementalPin, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(incrementalPin), count, RISING);
+  attachInterrupt(digitalPinToInterrupt(incrementalPin), count, CHANGE);
 
+  pinMode(13, OUTPUT);
   //set up output pins
   pinMode(stepPin, OUTPUT);
   pinMode(directionPin, OUTPUT);
-   TCCR0B = 0b00000010; // x8
-  TCCR0A = 0b00000001; // phase correct
-  analogWrite(stepPin, 127);
+  //change PWM frequency
+  TCCR0B = 0b00000010; // x8 
+  TCCR0A = 0b00000011; // 01 = phase correct, 11 = fast pwm
+  analogWrite(stepPin, 127); // 50% duty. Even square wave
   digitalWrite(directionPin, dir);
 
   
@@ -74,61 +85,42 @@ void loop() {
   float outputDecimal = inversegrayCode(outputGray)* 11.25; //5bits = 32 segments. 360/32 = 11.25 degrees
   
   //incremental counter
-  if (counter >= 60) {
-    dir = 0;
+  if (counter >= 80) {
+    dir = 1;
   }
   if (counter <= 10) {
-    dir = 1;
+    dir = 0;
   }
   
   if(digitalRead(incrementalPin) == 1 && wave == 0) {
     wave = 1;
-    if (dir == 1) {
+    /*if (dir == 1) {
       counter++;
     } else {
       counter--;
-    }
+    }*/
     
-    /*previousTime = currentTime;
-    
-    timeDif = currentTime - previousTime;
-    currentTime = millis();*/
   }
   if(digitalRead(incrementalPin) == 0 && wave == 1) {
     
    wave = 0;
   }
-
-
-  String timing = String(counter) + "," + timeDif;
   
-  //if we know freqnecy of counters
-  counterFreq = 1.0/timeDif;
-  //One counter corresponds to 6 degrees
-  //Angles per second = 6 * counters * counterfreq => 6*1*freq
-  long omega = 6.0 * counterFreq; 
-  //(angles per s)/360 = cycles per second, frequency
-  long freq = omega/360.0;
-  // 1hz = 60 rpm
-  float rpm = freq * 60.0;
-/*
-  //fill out rolling average array
-  for(i=1; i < avgSize; i++) {
-    rollingRPM[i] = rollingRPM[i - 1]; //move array items back one
-    avgRPM += rollingRPM[i];
+  currentTime = millis();
+  if((previousTime + measureTime) <= currentTime) {
+    
+    counterDif = counter - prevCounter;
+    previousTime = currentTime;
+    prevCounter = counter;
   }
-  rollingRPM[0] = rpm; //insert newest value into array
+  int theta = 6 * counterDif; //angle change in measure time. Degrees
+  double omega = (float(theta))/(measureTime/1000.0); //angular frequency. Degrees per second. 
+  double frequency = omega/360.0; //rotations per second. Hz
+  float rpm = frequency * 60.0; //rotations per minute 
 
-  //find average
-  for(i=0; i < avgSize; i++) {
-    avgRPM += rollingRPM[i]; //get total
-  }
-  avgRPM = avgRPM/avgSize; //divide by array size
-  */
-  //Serial.println(counter);
-  //Serial.println(rpm);
-  Serial.println(counter);
+  Serial.println(frequency);
   Serial.println(rpm);
+  
   updateOLED(outputDecimal, counter, rpm);
 }
 
@@ -140,18 +132,19 @@ int inversegrayCode(int n) {
  
     return inv;
 }
+
 void count() {
-  Serial.println("hello");
-  //counter++;
-  //previousTime = currentTime;
-  //currentTime = millis();
-  //timeDif = currentTime - previousTime;
-  
-  //if (dir == 1) {
-    
-  //} else {
-  //  counter--;
-  //}
+    if (dir == 0) {
+      counter++;
+    } else {
+      counter--;
+    }
+
+  //testing interupt
+  #ifdef testInterrupt
+    testLED = !testLED;
+    digitalWrite(13, testLED);
+  #endif
 }
 
 void updateOLED(float angle, int counter, float rpm){
@@ -160,7 +153,7 @@ void updateOLED(float angle, int counter, float rpm){
   oled.setCursor(0, 0);
   oled.println(String(angle) + " deg"); // text to display
   oled.setCursor(20, 30);        // position to display
-  oled.println(String(0) + " rpm"); // text to display
+  oled.println(String(rpm) + " rpm"); // text to display
   
   oled.setTextSize(1);
   oled.setCursor(0, 50);        // position to display
