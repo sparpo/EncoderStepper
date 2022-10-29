@@ -4,8 +4,9 @@
 #define SCREEN_WIDTH 128 // OLED display width,  in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
 #define avgSize 10
-#define measureTime 1000
+#define measureTime 5000000
 //#define testInterrupt
+#define testTime
 
 //pins
 //#define
@@ -28,9 +29,11 @@ int directionPin = 4; //motor direction
 
 //global variables
 int dir = 1;
+int dirMeasured = 1;
 
 //graycode output
 int outputGray = 0;
+float outputDecimal = 0;
 
 //Counter variables
 volatile int counter = 0;//all variables used in interrupt must be declared volatile
@@ -41,6 +44,7 @@ int counterDif = 0;
 double currentTime = 0;
 double previousTime = 0;
 
+float rpm = 0.0;
 
 void setup() {
   Serial.begin(19200);
@@ -52,26 +56,31 @@ void setup() {
 
   //attach interupt to incremental counter
   pinMode(incrementalPin, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(incrementalPin), count, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(incrementalPin), count, FALLING);
 
   pinMode(13, OUTPUT);
   //set up output pins
   pinMode(stepPin, OUTPUT);
   pinMode(directionPin, OUTPUT);
   //change PWM frequency
-  TCCR0B = 0b00000010; // x8 
-  TCCR0A = 0b00000011; // 01 = phase correct(4khz), 11 = fast pwm(8khz)
+  TCCR0B = 0b00000010; // 10 = x8, 101 = x1024
+  TCCR0A = 0b00000011; // 01 = phase correct(4khz), 11 = fast pwm(7.8khz)
   analogWrite(stepPin, 127); // 50% duty. Even square wave
   digitalWrite(directionPin, dir);
 
+ //steps per rev = 8000
+ //frequency = 7.8k
   
-  currentTime = millis();
+  currentTime = micros();
 
   setupOLED();
   
 }
 
 void loop() {
+  float lastDecimal = outputDecimal;//record last angle
+  
+  digitalWrite(13, testLED);
   //Serial.println(counter, avgRPM);
   int i = 0;
   //String out = "";
@@ -82,44 +91,43 @@ void loop() {
     int val = digitalRead(absolutePins[i]);
     outputGray = ((outputGray<<1) | val); //combine digital readings into one gray code
   }
-  float outputDecimal = inversegrayCode(outputGray)* 11.25; //5bits = 32 segments. 360/32 = 11.25 degrees
+  outputDecimal = inversegrayCode(outputGray)* 11.25; //5bits = 32 segments. 360/32 = 11.25 degrees
+  
+  if(lastDecimal > outputDecimal) {
+    dirMeasured = -1;
+  } else if(lastDecimal < outputDecimal) {
+    dirMeasured = 1;
+  }
   
   //incremental counter
-  if (counter >= 80) {
-    dir = 1;
-  }
-  if (counter <= 10) {
+  if (counter >= 160) {
     dir = 0;
   }
-  
-  if(digitalRead(incrementalPin) == 1 && wave == 0) {
-    wave = 1;
-    /*if (dir == 1) {
-      counter++;
-    } else {
-      counter--;
-    }*/
-    
-  }
-  if(digitalRead(incrementalPin) == 0 && wave == 1) {
-    
-   wave = 0;
+  if (counter <= 10) {
+    dir = 1;
   }
   
-  currentTime = millis();
+  float rotations = 0;
+  currentTime = micros();
   if((previousTime + measureTime) <= currentTime) {
     
     counterDif = counter - prevCounter;
     previousTime = currentTime;
     prevCounter = counter;
-  }
-  int theta = 6 * counterDif; //angle change in measure time. Degrees
-  double omega = (float(theta))/(measureTime/1000.0); //angular frequency. Degrees per second. 
-  double frequency = omega/360.0; //rotations per second. Hz
-  float rpm = frequency * 60.0; //rotations per minute 
+  
+    rotations = counterDif/60.0; //60 counts per rotation
 
-  Serial.println(frequency);
-  Serial.println(rpm);
+    rpm = rotations / (float(measureTime)/(10000000.0*60.0)); //rotations per minute 
+    
+   //testing time
+  #ifdef testTime
+    testLED = !testLED;
+    
+  #endif
+  }
+  Serial.println(counterDif);
+  Serial.println(rotations);
+  
   
   updateOLED(outputDecimal, counter, rpm);
 }
@@ -134,16 +142,12 @@ int inversegrayCode(int n) {
 }
 
 void count() {
-    if (dir == 0) {
-      counter++;
-    } else {
-      counter--;
-    }
+  counter +=dirMeasured;
 
   //testing interupt
   #ifdef testInterrupt
     testLED = !testLED;
-    digitalWrite(13, testLED);
+    
   #endif
 }
 
@@ -152,7 +156,7 @@ void updateOLED(float angle, int counter, float rpm){
   oled.clearDisplay(); // clear display
   oled.setCursor(0, 0);
   oled.println(String(angle) + " deg"); // text to display
-  oled.setCursor(20, 30);        // position to display
+  oled.setCursor(5, 30);        // position to display
   oled.println(String(rpm) + " rpm"); // text to display
   
   oled.setTextSize(1);
