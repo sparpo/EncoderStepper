@@ -18,7 +18,7 @@ Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 int wave = 0;
 //pins
-int absolutePins[5] = {8,9,10,11,12};//first 5 bits (A,B,C,D,E) are absolute encoder
+int absolutePins[5] = {12,11,10,9,8};//first 5 bits (A,B,C,D,E) are absolute encoder
 int incrementalPin = 2; //incremental encoder bit. Attach to pin 2 or 3, as they have hardware interupt
 
 //with normal 1.8 deg steppers, we would choose a frequency around 0hz to 50hz
