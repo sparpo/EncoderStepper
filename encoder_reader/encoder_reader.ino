@@ -1,3 +1,4 @@
+
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
@@ -33,6 +34,7 @@ int dirMeasured = 1;
 
 //graycode output
 int outputGray = 0;
+String binaryString = "";
 float outputDecimal = 0;
 
 //Counter variables
@@ -86,17 +88,27 @@ void loop() {
   //String out = "";
   digitalWrite(directionPin, dir);
   outputGray = 0;
+  binaryString = "";
   //first 5 bits (A,B,C,D,E) are absolute encoder
   for(i=0;i<5;i++) {
     int val = digitalRead(absolutePins[i]);
     outputGray = ((outputGray<<1) | val); //combine digital readings into one gray code
+    binaryString = binaryString + String(val);
   }
+  Serial.println();
   outputDecimal = inversegrayCode(outputGray)* 11.25; //5bits = 32 segments. 360/32 = 11.25 degrees
-  
-  if(lastDecimal > outputDecimal) {
-    dirMeasured = -1;
-  } else if(lastDecimal < outputDecimal) {
+
+
+  if(lastDecimal > outputDecimal) { //ld = 0, od = 360
     dirMeasured = 1;
+    if(lastDecimal == 348.75) {
+      dirMeasured = -1;
+    }
+  } else if(lastDecimal < outputDecimal) {
+    dirMeasured = -1;
+    if(lastDecimal == 0){
+      dirMeasured = 1;
+    }
   }
   
   //incremental counter
@@ -155,13 +167,16 @@ void updateOLED(float angle, int counter, float rpm){
   oled.setTextSize(2);
   oled.clearDisplay(); // clear display
   oled.setCursor(0, 0);
-  oled.println(String(angle) + " deg"); // text to display
-  oled.setCursor(5, 30);        // position to display
-  oled.println(String(rpm) + " rpm"); // text to display
+  oled.println(String(rpm) + " rpm"); // RPM
+  oled.setCursor(0, 35);        // position to display
+  
+  oled.println(String(angle) + " deg"); // Angle
   
   oled.setTextSize(1);
-  oled.setCursor(0, 50);        // position to display
-  oled.println(String(counter) + " counts"); // text to display
+  oled.setCursor(0, 54);        // position to display
+  oled.println("ABCDE: " + binaryString); // text to display
+  oled.setCursor(0, 16);        // position to display
+  oled.println("F: "+ String(counter) + " Counts"); // text to display
 
   oled.display();               // show on OLED
 }
