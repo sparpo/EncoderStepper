@@ -4,10 +4,10 @@
 #include <Adafruit_SSD1306.h>
 #define SCREEN_WIDTH 128 // OLED display width,  in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define avgSize 10
-#define measureTime 5000000
+#define measureTime 1000.0
 //#define testInterrupt
 #define testTime
+
 
 //pins
 //#define
@@ -43,8 +43,9 @@ int prevCounter = 0;
 int counterDif = 0;
 
 //timing variables
-double currentTime = 0;
-double previousTime = 0;
+float currentTime = 0;
+float previousTime = 0;
+float timeScaled  = 8;
 
 float rpm = 0.0;
 
@@ -64,41 +65,42 @@ void setup() {
   //set up output pins
   pinMode(stepPin, OUTPUT);
   pinMode(directionPin, OUTPUT);
+
   //change PWM frequency
-  TCCR0B = 0b00000010; // 10 = x8, 101 = x1024
-  TCCR0A = 0b00000011; // 01 = phase correct(4khz), 11 = fast pwm(7.8khz)
+  setFrequency_nanoEvery(3); //for nano every
+  //setFrequency() //for uno/nano
+  
   analogWrite(stepPin, 127); // 50% duty. Even square wave
   digitalWrite(directionPin, dir);
 
  //steps per rev = 8000
  //frequency = 7.8k
   
-  currentTime = micros();
+  currentTime = millis() * timeScaled;
 
   setupOLED();
   
 }
 
 void loop() {
+  digitalWrite(13, testLED);
+  
   float lastDecimal = outputDecimal;//record last angle
   
-  digitalWrite(13, testLED);
-  //Serial.println(counter, avgRPM);
   int i = 0;
   //String out = "";
   digitalWrite(directionPin, dir);
   outputGray = 0;
   binaryString = "";
+  
   //first 5 bits (A,B,C,D,E) are absolute encoder
   for(i=0;i<5;i++) {
     int val = digitalRead(absolutePins[i]);
     outputGray = ((outputGray<<1) | val); //combine digital readings into one gray code
     binaryString = binaryString + String(val);
   }
-  Serial.println();
+
   outputDecimal = inversegrayCode(outputGray)* 11.25; //5bits = 32 segments. 360/32 = 11.25 degrees
-
-
   if(lastDecimal > outputDecimal) { //ld = 0, od = 360
     dirMeasured = 1;
     if(lastDecimal == 348.75) {
@@ -120,8 +122,9 @@ void loop() {
   }
   
   float rotations = 0;
-  currentTime = micros();
-  if((previousTime + measureTime) <= currentTime) {
+  currentTime = millis();
+  float timeLimit = float(measureTime) * float(timeScaled); //needs to be scaled up as faster clock frequency is used
+  if((previousTime + timeLimit) <= currentTime) {
     
     counterDif = counter - prevCounter;
     previousTime = currentTime;
@@ -129,7 +132,7 @@ void loop() {
   
     rotations = counterDif/60.0; //60 counts per rotation
 
-    rpm = rotations / (float(measureTime)/(10000000.0*60.0)); //rotations per minute 
+    rpm = rotations / (float(measureTime)/(1000.0*60.0)); //rotations per minute 
     
    //testing time
   #ifdef testTime
@@ -137,8 +140,8 @@ void loop() {
     
   #endif
   }
-  Serial.println(counterDif);
-  Serial.println(rotations);
+  //Serial.println(counterDif);
+  //Serial.println(rotations);
   
   
   updateOLED(outputDecimal, counter, rpm);
@@ -194,4 +197,59 @@ void setupOLED() {
   oled.setCursor(0, 10);        // position to display
   //oled.println("Hello World!"); // text to display
   oled.display();               // show on OLED
+}
+/*
+void setFrequency() {
+  //For Atmega328 Nano/Uno
+  TCCR0B = 0b00000010; // 10 = x8, 101 = x1024
+  TCCR0A = 0b00000011; // 01 = phase correct(4khz), 11 = fast pwm(7.8khz)  
+}*/
+void setFrequency_nanoEvery(int freq) { 
+  //For Atmega4809 Nano Every
+  TCA0.SINGLE.CTRLA &= ~TCA_SINGLE_ENABLE_bm;
+                        // Turn off timer while we change parameters.
+  TCA0.SINGLE.CTRLA &= ~TCA_SINGLE_CLKSEL_gm;
+                          // Clear all CLKSEL bits.
+  switch(freq) {
+    case 8:
+      TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV1_gc;
+      timeScaled = 64;
+    break;
+    case 7:
+      TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV2_gc;
+      timeScaled = 32;
+    break;
+    case 6:
+      TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV4_gc;
+      timeScaled = 16;
+    break;
+    case 5:
+      TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV8_gc;
+      timeScaled = 8;
+    break;
+    case 4:
+      TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV16_gc;
+      timeScaled = 4;
+    break;
+    default:
+    case 3:
+      TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV64_gc;
+      timeScaled = 1;
+    break;
+      
+    case 2:
+      TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV256_gc;
+      timeScaled = 0.25;
+    break;
+
+    case 1:
+      TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV1024_gc; //976hz / 16 
+      timeScaled = 0.0625;
+    break;
+  }
+  
+  TCA0.SINGLE.CTRLA |= TCA_SINGLE_ENABLE_bm;
+                          // Re-enable timer. Pins 5 and 9 now run
+                        
+  
 }
