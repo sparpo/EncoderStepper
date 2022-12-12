@@ -49,6 +49,10 @@ float timeScaled  = 8;
 
 float rpm = 0.0;
 
+//position
+int maxPos = 180;
+int minPos = 10;
+
 void setup() {
   Serial.begin(19200);
   // put your setup code here, to run once:
@@ -67,8 +71,8 @@ void setup() {
   pinMode(directionPin, OUTPUT);
 
   //change PWM frequency
-  setFrequency_nanoEvery(3); //for nano every
-  //setFrequency() //for uno/nano
+  setSpeed_nanoEvery(3); //for nano every
+  //setSpeed() //for uno/nano
   
   analogWrite(stepPin, 127); // 50% duty. Even square wave
   digitalWrite(directionPin, dir);
@@ -114,11 +118,18 @@ void loop() {
   }
   
   //incremental counter
-  if (counter >= 160) {
+  if (counter >= maxPos) {
     dir = 0;
   }
-  if (counter <= 10) {
+  if (counter <= minPos) {
     dir = 1;
+  }
+  if(counter > (maxPos*0.9) | counter < (minPos*1.1)){
+    setSpeed_nanoEvery(1);
+  }else if(counter > (maxPos*0.8) | counter < (minPos*1.2)){
+    setSpeed_nanoEvery(3);
+  } else {
+    setSpeed_nanoEvery(5);
   }
   
   float rotations = 0;
@@ -199,18 +210,18 @@ void setupOLED() {
   oled.display();               // show on OLED
 }
 /*
-void setFrequency() {
+void setSpeed() {
   //For Atmega328 Nano/Uno
   TCCR0B = 0b00000010; // 10 = x8, 101 = x1024
   TCCR0A = 0b00000011; // 01 = phase correct(4khz), 11 = fast pwm(7.8khz)  
 }*/
-void setFrequency_nanoEvery(int freq) { 
+void setSpeed_nanoEvery(int spd) { 
   //For Atmega4809 Nano Every
   TCA0.SINGLE.CTRLA &= ~TCA_SINGLE_ENABLE_bm;
                         // Turn off timer while we change parameters.
   TCA0.SINGLE.CTRLA &= ~TCA_SINGLE_CLKSEL_gm;
                           // Clear all CLKSEL bits.
-  switch(freq) {
+  switch(spd) {
     case 8:
       TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV1_gc;
       timeScaled = 64;
