@@ -7,6 +7,7 @@
 #define measureTime 1000.0
 //#define testInterrupt
 #define testTime
+#define debug
 
 
 //pins
@@ -125,9 +126,9 @@ void loop() {
     dir = 1;
   }
   if(counter > (maxPos*0.9) | counter < (minPos*1.1)){
-    setSpeed_nanoEvery(1);
-  }else if(counter > (maxPos*0.8) | counter < (minPos*1.2)){
     setSpeed_nanoEvery(3);
+  }else if(counter > (maxPos*0.8) | counter < (minPos*1.2)){
+    setSpeed_nanoEvery(4);
   } else {
     setSpeed_nanoEvery(5);
   }
@@ -242,7 +243,7 @@ void setSpeed_nanoEvery(int spd) {
       TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV16_gc;
       timeScaled = 4;
     break;
-    default:
+    default: //normal prescaler, pin5 has 976Hz
     case 3:
       TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV64_gc;
       timeScaled = 1;
