@@ -3,7 +3,7 @@
 #include <Adafruit_SSD1306.h>
 #define SCREEN_WIDTH 128 // OLED display width,  in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
-#define measureTime 1000.0
+#define measureTime 100.0
 //#define testInterrupt
 #define testTime
 #define debug
@@ -17,15 +17,20 @@ Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 int absolutePins[5] = {12,11,10,9,8};//first 5 bits (A,B,C,D,E) are absolute encoder
 int incrementalPin = 2; //incremental encoder bit. Attach to pin 2 or 3, as they have hardware interupt (Nano only, Every should have an interrupt on every pin)
 
+//motor pins
 int outputPin = 5; //pwm pin with 1khz default.
 int directionPin = 4; //motor direction
 
-//global variables
-int dir = 1;
-int dirMeasured = 1;
+//motor control variables
+int dir = 0;
+int output = 0;
 
 //absolute position
-float outputDecimal = 0;
+int absolutePos = 0;
+int setPos = 0;
+
+//control variables
+int k = 0;
 
 //Counter variables
 volatile int counter = 0;//all variables used in interrupt must be declared volatile
@@ -54,8 +59,6 @@ void setup() {
   analogWrite(outputPin, 127); // 50% duty. Even square wave
   digitalWrite(directionPin, dir);
 
- //steps per rev = 8000
- //frequency = 7.8k
   
   currentTime = millis();
 
@@ -65,14 +68,48 @@ void setup() {
 
 void loop() {
   digitalWrite(13, testLED);
-  float lastDecimal = outputDecimal;//record last angle  
-  outputDecimal = absolutePosition();
+  float lastDecimal = absolutePos;//record last angle  
+  absolutePos = absolutePosition();
+
+  int error = calculateError(setPos, absolutePos, 32);
   
-  float angle = float(outputDecimal)*11.25;
+  if(error > 0){
+    dir = 1;
+  } else {
+    dir = 0;
+  }
+  output = abs(error)*k;
+  if(output > 255) {
+    output = 255;
+  }
+  if(output < 0) {
+    output = 0;
+  }
+  
+  analogWrite(outputPin, output);
+  digitalWrite(directionPin, dir);
+  
+  
+  
+  float angle = float(absolutePos)*11.25;
   rpm = calculateRPM();
-  updateOLED(outputDecimal, counter, rpm);
+  updateOLED(absolutePos, counter, rpm);
 }
 
+
+
+int calculateError(int a1, int a2, int maxVal){ //angular error 
+    int e = a1 - a2;
+    
+    if(abs(e)>16){ //if mag is more than 16, we know it should be the other side
+        if(e>0) {
+            e = -(32-abs(e)); //change it to reflex angle with direction
+        } else{
+            e = 32-abs(e);
+        }
+    }
+    return e;
+}
 int inversegrayCode(int n) {
     int inv = 0;
     // Taking xor until n becomes zero
@@ -80,6 +117,12 @@ int inversegrayCode(int n) {
         inv ^= n;
  
     return inv;
+}
+int normalizePos(int a, int maxVal) {
+  a = a% maxVal;
+  if (a < 0) 
+      a += maxVal;
+  return a;
 }
 
 void count() {
