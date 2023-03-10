@@ -30,7 +30,7 @@ int absolutePos = 0;
 int setPos = 0;
 
 //control variables
-int k = 0;
+int k = 5;
 
 //Counter variables
 volatile int counter = 0;//all variables used in interrupt must be declared volatile
@@ -46,24 +46,14 @@ float rpm = 0.0;
 
 void setup() {
   Serial.begin(19200);
-  // put your setup code here, to run once:
-
-  setupEncoder();
   pinMode(13, OUTPUT);
-  //set up output pins
   pinMode(outputPin, OUTPUT);
   pinMode(directionPin, OUTPUT);
-
-
-  
-  analogWrite(outputPin, 127); // 50% duty. Even square wave
   digitalWrite(directionPin, dir);
-
   
   currentTime = millis();
-
+  setupEncoder();
   setupOLED();
-  
 }
 
 void loop() {
@@ -71,19 +61,27 @@ void loop() {
   float lastDecimal = absolutePos;//record last angle  
   absolutePos = absolutePosition();
 
-  int error = calculateError(setPos, absolutePos, 32);
+  int error = calculateError(setPos, absolutePos, 32); //difference between set position and measured position
   
-  if(error > 0){
-    dir = 1;
-  } else {
+  if(error > 0){ //to control direction of motor
     dir = 0;
+  } else {
+    dir = 1;
   }
-  output = abs(error)*k;
-  if(output > 255) {
+  
+  output = 50 + abs(error)*k; //motor needs min 
+  
+  if(error == 0)
+    output = 0;
+  
+  if(output > 255) { //output signal is from 0 to 255
     output = 255;
   }
   if(output < 0) {
     output = 0;
+  }
+  if(dir == 1) { //when dir goes high the output needs to be inversed.
+    output = 255 - output; //Inverse of output.
   }
   
   analogWrite(outputPin, output);
@@ -93,7 +91,7 @@ void loop() {
   
   float angle = float(absolutePos)*11.25;
   rpm = calculateRPM();
-  updateOLED(absolutePos, counter, rpm);
+  updateOLED(absolutePos, counter, rpm, error, output);
 }
 
 
@@ -185,7 +183,7 @@ String binaryString(int decimal, int bits) {
   return val;
 }
 
-void updateOLED(float angle, int counter, float rpm){
+void updateOLED(float angle, int counter, float rpm, int err, int out){
   oled.setTextSize(2);
   oled.clearDisplay(); // clear display
   oled.setCursor(0, 0);
@@ -200,7 +198,7 @@ void updateOLED(float angle, int counter, float rpm){
   
   oled.println("ABCDE: " + binaryString(angle, 5)); // text to display
   oled.setCursor(0, 16);        // position to display
-  oled.println("F: "+ String(counter) + " Counts"); // text to display
+  oled.println("Error: "+ String(err) + " Ouput: " + String(out)); // text to display
 
   oled.display();               // show on OLED
 }
