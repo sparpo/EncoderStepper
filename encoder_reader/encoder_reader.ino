@@ -30,7 +30,7 @@ int absolutePos = 0;
 int setPos = 0;
 
 //control variables
-int k = 5;
+int k = 6;
 
 //Counter variables
 volatile int counter = 0;//all variables used in interrupt must be declared volatile
@@ -69,9 +69,9 @@ void loop() {
     dir = 1;
   }
   
-  output = 50 + abs(error)*k; //motor needs min 
+  output = 50 + abs(error)*k; //motor needs min to turn
   
-  if(error == 0)
+  if(error == 0) //if at 0 then don't move
     output = 0;
   
   if(output > 255) { //output signal is from 0 to 255
