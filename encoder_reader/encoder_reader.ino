@@ -69,7 +69,7 @@ void loop() {
     dir = 1;
   }
   
-  output = 50 + abs(error)*k; //motor needs min to turn
+  output = 54 + abs(error)*k; //motor needs min to turn
   
   if(error == 0) //if at 0 then don't move
     output = 0;
